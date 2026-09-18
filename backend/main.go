@@ -20,10 +20,9 @@ import (
 var mongoClient *mongo.Client
 
 func connectMongoDB() error {
-	err := godotenv.Load()
-	if err != nil {
-		return err
-	}
+	// Load .env locally.
+	// On Render, this does nothing and environment variables are used.
+	_ = godotenv.Load()
 
 	mongoURI := os.Getenv("MONGO_URI")
 
@@ -43,6 +42,8 @@ func connectMongoDB() error {
 	)
 	defer cancel()
 
+	var err error
+
 	mongoClient, err = mongo.Connect(opts)
 	if err != nil {
 		return err
@@ -58,6 +59,7 @@ func connectMongoDB() error {
 
 func main() {
 
+	// Connect to MongoDB
 	err := connectMongoDB()
 	if err != nil {
 		panic("MongoDB connection failed: " + err.Error())
@@ -65,6 +67,7 @@ func main() {
 
 	println("MongoDB connected successfully!")
 
+	// Connect to Redis
 	err = config.ConnectRedis()
 	if err != nil {
 		panic("Redis connection failed: " + err.Error())
@@ -72,7 +75,7 @@ func main() {
 
 	println("Redis connected successfully!")
 
-	// MongoDB database and collection
+	// MongoDB database and collections
 	db := mongoClient.Database("livepoll")
 
 	userCollection := db.Collection("users")
@@ -83,20 +86,36 @@ func main() {
 	authHandler := &handlers.AuthHandler{
 		UserCollection: userCollection,
 	}
+
+	// Poll handler
 	pollHandler := &handlers.PollHandler{
 		PollCollection: pollCollection,
 		VoteCollection: voteCollection,
 		RedisClient:    config.RedisClient,
 	}
 
+	// Gin router
 	router := gin.Default()
+
+	// CORS
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
-    		"http://localhost:5173",
-    		"http://192.168.29.154:5173",
+			"http://localhost:5173",
+			"http://192.168.29.154:5173",
 		},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowMethods: []string{
+			"GET",
+			"POST",
+			"PUT",
+			"DELETE",
+			"OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Accept",
+			"Authorization",
+		},
 		AllowCredentials: true,
 	}))
 
@@ -112,27 +131,69 @@ func main() {
 	// Authentication routes
 	router.POST("/api/auth/signup", authHandler.Signup)
 	router.POST("/api/auth/login", authHandler.Login)
-	router.POST("/api/polls", middleware.AuthRequired(), pollHandler.CreatePoll)
-	router.GET("/api/polls/:id", pollHandler.GetPoll)
-	router.POST("/api/polls/:id/vote", pollHandler.Vote)
-	router.GET("/api/polls/:id/live", pollHandler.LiveResults)
-	router.GET("/api/polls/:id/results", pollHandler.GetResults)
-	router.GET("/api/polls/my", middleware.AuthRequired(), pollHandler.GetMyPolls)
-	router.PUT("/api/polls/:id/close", middleware.AuthRequired(), pollHandler.ClosePoll)
+
+	// Poll routes
+	router.POST(
+		"/api/polls",
+		middleware.AuthRequired(),
+		pollHandler.CreatePoll,
+	)
+
+	router.GET(
+		"/api/polls/:id",
+		pollHandler.GetPoll,
+	)
+
+	router.POST(
+		"/api/polls/:id/vote",
+		pollHandler.Vote,
+	)
+
+	router.GET(
+		"/api/polls/:id/live",
+		pollHandler.LiveResults,
+	)
+
+	router.GET(
+		"/api/polls/:id/results",
+		pollHandler.GetResults,
+	)
+
+	router.GET(
+		"/api/polls/my",
+		middleware.AuthRequired(),
+		pollHandler.GetMyPolls,
+	)
+
+	router.PUT(
+		"/api/polls/:id/close",
+		middleware.AuthRequired(),
+		pollHandler.ClosePoll,
+	)
 
 	// Protected test route
-	router.GET("/api/protected", middleware.AuthRequired(), func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "You are authenticated!",
-			"user_id": c.GetString("user_id"),
-		})
-	})
+	router.GET(
+		"/api/protected",
+		middleware.AuthRequired(),
+		func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "You are authenticated!",
+				"user_id": c.GetString("user_id"),
+			})
+		},
+	)
 
+	// Render provides PORT.
+	// Locally, use 8081.
 	port := os.Getenv("PORT")
 
 	if port == "" {
-    	port = "8081"
+		port = "8081"
 	}
 
-	router.Run("0.0.0.0:" + port)
+	println("Starting LivePoll backend on port " + port)
+
+	if err := router.Run("0.0.0.0:" + port); err != nil {
+		panic("Server failed to start: " + err.Error())
+	}
 }
