@@ -1,7 +1,3 @@
-Absolutely. Since the application is now deployed and working end-to-end, let's make the README look **professional and internship-ready**, while keeping it truthful to what you actually built.
-
-You can replace your current root `README.md` with this:
-
 ````markdown
 # LivePoll
 
