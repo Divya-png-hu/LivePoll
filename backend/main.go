@@ -101,6 +101,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:5173",
+			"http://localhost:5175",
 			"http://192.168.29.154:5173",
 		},
 		AllowMethods: []string{
